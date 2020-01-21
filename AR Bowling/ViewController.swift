@@ -5,13 +5,16 @@ import ARKit
 class ViewController: UIViewController, ARSCNViewDelegate, ARSessionDelegate, SCNPhysicsContactDelegate {
 
     @IBOutlet var sceneView: ARSCNView!
+    @IBOutlet var restartButton : UIButton!
+    @IBOutlet var lblCount : UILabel?
+    
     var trackerNode: SCNNode?
     var foundSurface = false
     var tracking = true
     var directionalLightNode: SCNNode?
     var ambientLightNode: SCNNode?
     var container: SCNNode!
-    
+    var trackerNodePosition:SCNVector3?
     
     func renderer(_ renderer: SCNSceneRenderer, updateAtTime time: TimeInterval) {
         guard tracking else { return }
@@ -38,16 +41,21 @@ class ViewController: UIViewController, ARSCNViewDelegate, ARSessionDelegate, SC
         if tracking {
             //Set up the scene
             guard foundSurface else { return }
-            let trackingPosition = trackerNode!.position
+            if( trackerNodePosition == nil) {trackerNodePosition = trackerNode!.position}
+            //let trackingPosition = trackerNode!.position
+            trackerNodePosition = trackerNode!.position
+
             trackerNode?.removeFromParentNode()
             container = sceneView.scene.rootNode.childNode(withName: "container", recursively: false)!
-            container.position = trackingPosition
+            container.position = trackerNodePosition!
             container.isHidden = false
             ambientLightNode = container.childNode(withName: "ambientLight", recursively: false)
             directionalLightNode = container.childNode(withName: "directionalLight", recursively: false)
             sceneView.scene.physicsWorld.contactDelegate = self
             tracking = false
+            countCones()
         } else {
+            countCones()
             //Handle the shooting
             guard let frame = sceneView.session.currentFrame else { return }
             let camMatrix = SCNMatrix4(frame.camera.transform)
@@ -66,6 +74,10 @@ class ViewController: UIViewController, ARSCNViewDelegate, ARSessionDelegate, SC
             sceneView.scene.rootNode.addChildNode(ballNode)
             ballNode.runAction(SCNAction.sequence([SCNAction.wait(duration: 5.0), SCNAction.removeFromParentNode()]))
             ballNode.physicsBody?.applyForce(direction, asImpulse: true)
+            //check if you got all capsules, if so, restart
+            if(countCones() == 0){
+                restartScene()
+            }
         }
     }
     
@@ -75,21 +87,45 @@ class ViewController: UIViewController, ARSCNViewDelegate, ARSessionDelegate, SC
         ambientLightNode?.light?.intensity = lightEstimate.ambientIntensity * 0.4
         directionalLightNode?.light?.intensity = lightEstimate.ambientIntensity
     }
+    @IBAction func restartScene(){
+      //  let scene = SCNScene(named: "art.scnassets/scene.scn")!
+        let scene = SCNScene(named: "art.scnassets/sceneNew.scn")!
+
+        sceneView.scene = scene
+        tracking = true;
+        
+    }
+    //check how many alive cones there are
+    func countCones()->Int{
+        let count = container.childNodes.filter({$0.name == "capsule"}).count
+        print("count: ",count)
+        lblCount?.text = "\(count) out of 10"
+        return count
+    }
     
     //collision happened
     func physicsWorld(_ world: SCNPhysicsWorld, didBegin contact: SCNPhysicsContact) {
-       // let ball = contact.nodeA.physicsBody!.contactTestBitMask == 3 ? contact.nodeA : contact.nodeB
-        //let explosion = SCNParticleSystem(named: "Explosion.scnp", inDirectory: nil)!
-        //let explosionNode = SCNNode()
-        //set explosion at collission position
-        //explosionNode.position = ball.presentation.position
-        //sceneView.scene.rootNode.addChildNode(explosionNode)
-        //explosionNode.addParticleSystem(explosion)
-        //ball.removeFromParentNode()
-        let cone = contact.nodeB
-        cone.runAction(SCNAction.sequence([SCNAction.wait(duration: 2.0), SCNAction.removeFromParentNode()]))
+        let cone = contact.nodeA
+        let ball = contact.nodeB
+        //remove cone
+        cone.runAction(SCNAction.sequence([
+            SCNAction.removeFromParentNode()
+        ]))
+        ball.runAction(SCNAction.sequence([SCNAction.wait(duration: 2.0), SCNAction.removeFromParentNode()]))
+        print("Hit! cone")
+        //update cone label
+        countCones()
+//        if( container.childNode(withName: "capsule", recursively: false) == nil){
+//            restartScene()
+//        }
+//        self.coneCount-=1
+//        if(coneCount <= 0){
+//            restartScene()
+//        }
     }
-    
+ @IBAction func onClick(_ sender: UIButton, forEvent event: UIEvent){
+    restartScene()
+    }
     override func viewDidLoad() {
         super.viewDidLoad()
         // Set the view's delegate
@@ -97,9 +133,11 @@ class ViewController: UIViewController, ARSCNViewDelegate, ARSessionDelegate, SC
         // Show statistics such as fps and timing information
         sceneView.showsStatistics = true
         // Create a new scene
-        let scene = SCNScene(named: "art.scnassets/scene.scn")!
+        //let scene = SCNScene(named: "art.scnassets/scene.scn")!
+        let scene = SCNScene(named: "art.scnassets/sceneNew.scn")!
         // Set the scene to the view
         sceneView.scene = scene
+        
     }
     
     override func viewWillAppear(_ animated: Bool) {
